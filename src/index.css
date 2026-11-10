@@ -1,0 +1,214 @@
+@import "tailwindcss";
+
+@keyframes spinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes scanLine {
+  0% {
+    top: 0%;
+  }
+  50% {
+    top: 90%;
+  }
+  100% {
+    top: 0%;
+  }
+}
+
+@keyframes radarSweep {
+  0% {
+    left: 0%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+@keyframes shakeX {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+@keyframes fadeInEffect {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-spin-slow {
+  animation: spinSlow 12s linear infinite;
+}
+
+.animate-scan {
+  animation: scanLine 3s ease-in-out infinite;
+}
+
+.animate-radarSweep {
+  animation: radarSweep 2s linear infinite;
+}
+
+.animate-shake {
+  animation: shakeX 0.4s ease-in-out;
+}
+
+.animate-fadeIn {
+  animation: fadeInEffect 0.3s ease-out forwards;
+}
+
+/* Scrollbar refinement */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* =========================================
+   LIGHTING MODES STYLES
+   ========================================= */
+
+/* Dark Mode (Midnight) */
+.theme-dark {
+  background-color: #090d16 !important;
+  color: #f1f5f9 !important;
+  color-scheme: dark;
+}
+
+.theme-dark .bg-slate-50,
+.theme-dark .bg-slate-50\/70,
+.theme-dark .bg-slate-50\/60,
+.theme-dark .bg-slate-50\/50,
+.theme-dark .bg-slate-50\/40 {
+  background-color: #090d16 !important;
+}
+
+.theme-dark .bg-white {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: #1e293b !important;
+}
+
+.theme-dark .bg-slate-100 {
+  background-color: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+.theme-dark .text-slate-900,
+.theme-dark .text-slate-950,
+.theme-dark .text-slate-800,
+.theme-dark .text-slate-700 {
+  color: #f1f5f9 !important;
+}
+
+.theme-dark .text-slate-600,
+.theme-dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+.theme-dark .border-slate-100,
+.theme-dark .border-slate-200,
+.theme-dark .border-slate-200\/80,
+.theme-dark .border-slate-300 {
+  border-color: #1e293b !important;
+}
+
+.theme-dark input,
+.theme-dark select,
+.theme-dark textarea {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+.theme-dark header,
+.theme-dark aside {
+  background-color: rgba(15, 23, 42, 0.96) !important;
+  border-color: #1e293b !important;
+}
+
+/* Warm / Eye Care Mode (Amber Sunset) */
+.theme-warm {
+  background-color: #f8f4ec !important;
+  color: #292524 !important;
+  color-scheme: light;
+}
+
+.theme-warm .bg-slate-50,
+.theme-warm .bg-slate-50\/70,
+.theme-warm .bg-slate-50\/60,
+.theme-warm .bg-slate-50\/50,
+.theme-warm .bg-slate-50\/40 {
+  background-color: #f8f4ec !important;
+}
+
+.theme-warm .bg-white {
+  background-color: #fdfbf7 !important;
+  color: #292524 !important;
+  border-color: #e7e0d3 !important;
+}
+
+.theme-warm .bg-slate-100 {
+  background-color: #eee7db !important;
+  color: #44403c !important;
+}
+
+.theme-warm .text-slate-900,
+.theme-warm .text-slate-950,
+.theme-warm .text-slate-800,
+.theme-warm .text-slate-700 {
+  color: #292524 !important;
+}
+
+.theme-warm .text-slate-600,
+.theme-warm .text-slate-500 {
+  color: #57534e !important;
+}
+
+.theme-warm .border-slate-100,
+.theme-warm .border-slate-200,
+.theme-warm .border-slate-200\/80,
+.theme-warm .border-slate-300 {
+  border-color: #e7e0d3 !important;
+}
+
+.theme-warm input,
+.theme-warm select,
+.theme-warm textarea {
+  background-color: #fdfbf7 !important;
+  color: #292524 !important;
+  border-color: #d6cebf !important;
+}
+
+.theme-warm header,
+.theme-warm aside {
+  background-color: rgba(253, 251, 247, 0.96) !important;
+  border-color: #e7e0d3 !important;
+}

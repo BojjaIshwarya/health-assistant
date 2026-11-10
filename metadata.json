@@ -1,0 +1,6 @@
+{
+  "name": "HealthAssist AI - Personal Health & Lifestyle Assistant",
+  "description": "AI-based healthcare assistant combining disease prediction, 24/7 medical chatbot, hospital locator, personalized diet planning, health records, IoT wearable monitoring, and deep learning vision/audio models.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
