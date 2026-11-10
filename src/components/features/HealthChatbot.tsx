@@ -8,12 +8,13 @@ import {
   Volume2, 
   VolumeX, 
   RotateCcw,
-  Smile,
-  Sparkles
+  Smile
 } from 'lucide-react';
 import { SupportedLanguage, ChatMessage, UserProfile } from '../../types';
 import { TRANSLATIONS } from '../../translations';
 import { getChatHistory, saveChatHistory } from '../../services/storageService';
+import { generateComprehensiveHealthReply } from '../../services/healthAssistantBrain';
+import { FormattedChatMessage } from './FormattedChatMessage';
 
 interface HealthChatbotProps {
   language: SupportedLanguage;
@@ -41,12 +42,13 @@ interface LocalizedBotContent {
 
 const BOT_LOCALES: Record<SupportedLanguage, LocalizedBotContent> = {
   en: {
-    welcome: "Hello! I am your HealthAssist AI Assistant. How can I help you today? You can ask about symptoms, diet, or general health.",
+    welcome: "Hello! I am your HealthAssist AI Assistant. Ask me any question about your health, symptoms, nutrition, medications, or any feature in HealthAssist AI.",
     prompts: [
-      "What are early warning signs of Diabetes?",
-      "How can I reduce blood pressure naturally?",
-      "What foods should I avoid for high cholesterol?",
-      "I have been feeling stressed and anxious recently"
+      "What should I do if I have a headache and fatigue?",
+      "How does the Symptom Checker work in this app?",
+      "What are the best home remedies for acidity and indigestion?",
+      "How do I find a nearby hospital or emergency clinic?",
+      "How can I reduce blood pressure naturally?"
     ],
     diabetesReply: "Early signs of diabetes include frequent urination, excessive thirst, persistent fatigue, and blurred vision. It is recommended to check your Fasting Blood Sugar (<100 mg/dL normal) and HbA1c (<5.7% normal).",
     bpReply: "To maintain optimal blood pressure: limit daily sodium intake (<2,300 mg), engage in 30 minutes of daily brisk walking, reduce stress, and prioritize 7-8 hours of sound sleep.",
@@ -350,37 +352,9 @@ export const HealthChatbot: React.FC<HealthChatbotProps> = ({
     return { emotion: 'General', sentiment: 'Neutral', intensity: 50 };
   };
 
-  // Generate reply strictly in the user's selected language
+  // Generate intelligent clinical reply for any health or application question
   const generateLocalizedReply = (userInput: string): string => {
-    const lower = userInput.toLowerCase();
-
-    // Check Diabetes
-    if (lower.includes('diabet') || lower.includes('sugar') || lower.includes('मधुमेह') || lower.includes('షుగర్') || lower.includes('சர்க்கரை') || lower.includes('ಮಧುಮೇಹ') || lower.includes('പ്രമേഹം')) {
-      return botLocale.diabetesReply;
-    }
-
-    // Check BP / Hypertension
-    if (lower.includes('pressure') || lower.includes('bp') || lower.includes('रक्तचाप') || lower.includes('రక్తపోటు') || lower.includes('இரத்த அழுத்தம்') || lower.includes('ರಕ್ತದೊತ್ತಡ')) {
-      return botLocale.bpReply;
-    }
-
-    // Check Chest pain / Emergency
-    if (lower.includes('chest') || lower.includes('heart') || lower.includes('सीना') || lower.includes('ఛాతీ') || lower.includes('நெஞ்சு') || lower.includes('ಎದೆ')) {
-      return botLocale.chestPainReply;
-    }
-
-    // Check Diet / Food
-    if (lower.includes('diet') || lower.includes('food') || lower.includes('eat') || lower.includes('आहार') || lower.includes('ఆహారం') || lower.includes('உணவு') || lower.includes('ಊಟ')) {
-      return botLocale.dietReply;
-    }
-
-    // Check Stress / Anxiety
-    if (lower.includes('stress') || lower.includes('anxious') || lower.includes('तनाव') || lower.includes('ఒత్తిడి') || lower.includes('மன அழுத்தம்') || lower.includes('ಚಿಂತೆ')) {
-      return botLocale.stressReply;
-    }
-
-    // Default localized response
-    return botLocale.generalReply;
+    return generateComprehensiveHealthReply(userInput, language, currentUser);
   };
 
   const speakText = (text: string) => {
@@ -430,7 +404,7 @@ export const HealthChatbot: React.FC<HealthChatbotProps> = ({
     const sendChatQuery = async () => {
       let replyText = '';
 
-      // Try server-side Gemini 3.8 Flash endpoint
+      // Query server-side Gemini endpoint with 15s timeout
       try {
         const res = await fetch('/api/chat', {
           method: 'POST',
@@ -443,7 +417,8 @@ export const HealthChatbot: React.FC<HealthChatbotProps> = ({
               gender: currentUser.gender,
               bloodGroup: currentUser.bloodGroup
             }
-          })
+          }),
+          signal: AbortSignal.timeout(15000)
         });
 
         if (res.ok) {
@@ -453,7 +428,7 @@ export const HealthChatbot: React.FC<HealthChatbotProps> = ({
           }
         }
       } catch (err) {
-        console.log('Using localized offline health engine:', err);
+        console.log('Using localized offline health engine fallback:', err);
       }
 
       if (!replyText) {
@@ -510,13 +485,13 @@ export const HealthChatbot: React.FC<HealthChatbotProps> = ({
               <h1 className="text-2xl font-black text-slate-900">
                 {t.healthChatbot}
               </h1>
-              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 shadow-xs">
-                <Sparkles className="w-3 h-3 text-blue-600" />
-                Gemini 3.8 Flash
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1 shadow-xs">
+                <MessageSquareHeart className="w-3 h-3 text-teal-600" />
+                24/7 Health Assistant
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Multilingual clinical communication powered by Gemini 3.8 Flash medical intelligence.
+              Ask any question about symptoms, health conditions, nutrition, or HealthAssist features.
             </p>
           </div>
         </div>
@@ -550,7 +525,7 @@ export const HealthChatbot: React.FC<HealthChatbotProps> = ({
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs flex flex-col h-[650px] overflow-hidden">
         
         {/* Messages Stream */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 scrollbar-thin">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 scrollbar-thin bg-slate-50/50">
           {messages.map((msg) => {
             const isUser = msg.sender === 'user';
             return (
@@ -564,13 +539,13 @@ export const HealthChatbot: React.FC<HealthChatbotProps> = ({
                   {isUser ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-1 max-w-[85%] sm:max-w-[78%]">
                   <div className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-xs ${
                     isUser
                       ? 'bg-teal-600 text-white rounded-tr-none'
-                      : 'bg-slate-50 text-slate-800 border border-slate-200/80 rounded-tl-none'
+                      : 'bg-white text-slate-800 border border-slate-200/90 rounded-tl-none shadow-xs'
                   }`}>
-                    {msg.text}
+                    <FormattedChatMessage content={msg.text} isUser={isUser} />
                   </div>
 
                   <div className={`text-[10px] text-slate-400 ${isUser ? 'text-right' : 'text-left pl-1'}`}>

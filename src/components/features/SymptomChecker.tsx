@@ -16,8 +16,7 @@ import {
   Droplets,
   Layers,
   ShieldCheck,
-  HeartHandshake,
-  Sparkles
+  HeartHandshake
 } from 'lucide-react';
 import { 
   SupportedLanguage, 
@@ -208,163 +207,153 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
     return rule.riskLevel || 'Low';
   };
 
-  // High-Confidence Multi-Disease Clinical Diagnostic Matcher (Powered by Gemini 3.8 Flash & Clinical Intelligence)
-  const handleRunGeneralPrediction = async () => {
+  // Synchronous High-Confidence Clinical Matcher (Instant execution)
+  const computeLocalClinicalPrediction = (symptoms: string[]): DiseasePrediction => {
+    interface CandidateMatch {
+      rule: DiseaseRule;
+      coreMatched: string[];
+      suppMatched: string[];
+      totalMatchedCount: number;
+      calculatedConfidence: number;
+      diagnosticScore: number;
+      calibratedRisk: 'Low' | 'Moderate' | 'High' | 'Severe';
+    }
+
+    const candidateMatches: CandidateMatch[] = [];
+
+    for (const rule of DISEASE_RULES) {
+      const coreMatched = rule.coreSymptoms.filter(symId => symptoms.includes(symId));
+      const suppMatched = rule.supportingSymptoms.filter(symId => symptoms.includes(symId));
+      const totalMatchedCount = coreMatched.length + suppMatched.length;
+
+      if (totalMatchedCount > 0) {
+        const diagnosticScore = (coreMatched.length * 4.0) + (suppMatched.length * 1.5);
+
+        let confidence: number;
+        if (coreMatched.length > 0) {
+          const coreRatio = coreMatched.length / rule.coreSymptoms.length;
+          const boost = Math.min(4, suppMatched.length * 2);
+          confidence = Math.min(96, Math.max(90, Math.round((rule.baseConfidence - (1 - coreRatio) * 4) + boost)));
+        } else {
+          confidence = Math.min(86, Math.max(78, 76 + suppMatched.length * 4));
+        }
+
+        const calibratedRisk = evaluateDynamicRisk(rule, symptoms);
+
+        candidateMatches.push({
+          rule,
+          coreMatched,
+          suppMatched,
+          totalMatchedCount,
+          calculatedConfidence: confidence,
+          diagnosticScore,
+          calibratedRisk
+        });
+      }
+    }
+
+    candidateMatches.sort((a, b) => {
+      if (b.calculatedConfidence !== a.calculatedConfidence) {
+        return b.calculatedConfidence - a.calculatedConfidence;
+      }
+      return b.diagnosticScore - a.diagnosticScore;
+    });
+
+    if (candidateMatches.length > 0) {
+      const topCandidate = candidateMatches[0];
+      const differentials: DifferentialDiagnosis[] = candidateMatches.slice(1, 4).map(item => ({
+        disease: item.rule.name,
+        confidence: item.calculatedConfidence,
+        riskLevel: item.calibratedRisk,
+        matchedSymptoms: [...item.coreMatched, ...item.suppMatched].map(
+          id => SYMPTOMS_LIST.find(s => s.id === id)?.name || id
+        ),
+        differentiationNote: item.rule.differentiationNote,
+        specialist: item.rule.specialist
+      }));
+
+      return {
+        disease: topCandidate.rule.name,
+        confidence: topCandidate.calculatedConfidence,
+        riskLevel: topCandidate.calibratedRisk,
+        matchedSymptoms: [...topCandidate.coreMatched, ...topCandidate.suppMatched].map(
+          id => SYMPTOMS_LIST.find(s => s.id === id)?.name || id
+        ),
+        description: topCandidate.rule.description,
+        precautions: topCandidate.rule.precautions,
+        recommendedSpecialist: topCandidate.rule.specialist,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        differentials
+      };
+    }
+
+    return {
+      disease: 'Benign Transient Fatigue & Daily Strain',
+      confidence: 92,
+      riskLevel: 'Low',
+      matchedSymptoms: symptoms.map(id => SYMPTOMS_LIST.find(s => s.id === id)?.name || id),
+      description: 'Observed symptoms do not indicate an acute illness. Mild fatigue or minor discomfort is commonly self-resolving with restorative rest.',
+      precautions: [
+        'Maintain optimal oral hydration and 7-8 hours of sleep',
+        'Take periodic breaks and practice relaxation',
+        'Consult your primary care physician for routine wellness reviews'
+      ],
+      recommendedSpecialist: 'General Physician / Self-Care',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      differentials: []
+    };
+  };
+
+  // Ultra-Fast Clinical Diagnostic Matcher with Non-Blocking Background AI Refinement
+  const handleRunGeneralPrediction = () => {
     if (selectedSymptoms.length === 0) return;
     setIsPredicting(true);
     setSavedNotice(false);
 
+    // Instant clinical evaluation calculated immediately with smooth 100ms micro-transition
+    setTimeout(() => {
+      const localResult = computeLocalClinicalPrediction(selectedSymptoms);
+      setPredictionResult(localResult);
+      setIsPredicting(false);
+    }, 100);
+
+    // Non-blocking background AI enhancement via server endpoint
     const symptomNames = selectedSymptoms.map(id => SYMPTOMS_LIST.find(s => s.id === id)?.name || id);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2400);
 
-    // 1. Attempt live diagnosis via Gemini 3.8 Flash server endpoint
-    try {
-      const res = await fetch('/api/analyze-symptoms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symptoms: symptomNames,
-          userProfile: {
-            age: currentUser.age,
-            gender: currentUser.gender,
-            bmi: currentUser.bmi
-          },
-          language
-        })
-      });
-
-      if (res.ok) {
-        const json = await res.json();
+    fetch('/api/analyze-symptoms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        symptoms: symptomNames,
+        userProfile: {
+          age: currentUser.age,
+          gender: currentUser.gender,
+          bmi: currentUser.bmi
+        },
+        language
+      }),
+      signal: controller.signal
+    })
+      .then(res => res.json())
+      .then(json => {
+        clearTimeout(timer);
         if (json.success && json.data && json.data.disease) {
           const gData = json.data;
-          setPredictionResult({
-            disease: gData.disease,
-            confidence: gData.confidence || 94,
-            riskLevel: gData.riskLevel || 'Low',
-            matchedSymptoms: symptomNames,
-            description: gData.description,
-            precautions: gData.precautions || [],
-            recommendedSpecialist: gData.recommendedSpecialist || 'General Physician',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            differentials: gData.differentials || [],
-            poweredBy: 'Gemini 3.8 Flash Clinical AI'
-          });
-          setIsPredicting(false);
-          return;
-        }
-      }
-    } catch (err) {
-      console.log('Using calibrated ensemble clinical engine:', err);
-    }
-
-    // 2. Local Calibrated Clinical Engine (modeled after Gemini & ChatGPT medical reasoning)
-    setTimeout(() => {
-      interface CandidateMatch {
-        rule: DiseaseRule;
-        coreMatched: string[];
-        suppMatched: string[];
-        totalMatchedCount: number;
-        calculatedConfidence: number;
-        diagnosticScore: number;
-        calibratedRisk: 'Low' | 'Moderate' | 'High' | 'Severe';
-      }
-
-      const candidateMatches: CandidateMatch[] = [];
-
-      for (const rule of DISEASE_RULES) {
-        const coreMatched = rule.coreSymptoms.filter(symId => selectedSymptoms.includes(symId));
-        const suppMatched = rule.supportingSymptoms.filter(symId => selectedSymptoms.includes(symId));
-        const totalMatchedCount = coreMatched.length + suppMatched.length;
-
-        if (totalMatchedCount > 0) {
-          // Weighted scoring: Core pathognomonic symptoms carry heavy diagnostic weight
-          const diagnosticScore = (coreMatched.length * 4.0) + (suppMatched.length * 1.5);
-
-          // Calibrated high confidence (typically 90% - 96% when matching clinical syndromes)
-          let confidence: number;
-          if (coreMatched.length > 0) {
-            const coreRatio = coreMatched.length / rule.coreSymptoms.length;
-            const boost = Math.min(4, suppMatched.length * 2);
-            confidence = Math.min(96, Math.max(90, Math.round((rule.baseConfidence - (1 - coreRatio) * 4) + boost)));
-          } else {
-            // Only supporting symptoms matched
-            confidence = Math.min(86, Math.max(78, 76 + suppMatched.length * 4));
-          }
-
-          const calibratedRisk = evaluateDynamicRisk(rule, selectedSymptoms);
-
-          candidateMatches.push({
-            rule,
-            coreMatched,
-            suppMatched,
-            totalMatchedCount,
-            calculatedConfidence: confidence,
-            diagnosticScore,
-            calibratedRisk
+          setPredictionResult(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              description: gData.description || prev.description,
+              calmReassurance: gData.calmReassurance || prev.calmReassurance
+            };
           });
         }
-      }
-
-      // Sort candidate diseases by confidence descending, then by diagnosticScore
-      candidateMatches.sort((a, b) => {
-        if (b.calculatedConfidence !== a.calculatedConfidence) {
-          return b.calculatedConfidence - a.calculatedConfidence;
-        }
-        return b.diagnosticScore - a.diagnosticScore;
+      })
+      .catch(() => {
+        clearTimeout(timer);
       });
-
-      if (candidateMatches.length > 0) {
-        const topCandidate = candidateMatches[0];
-        
-        // Map remaining matching diseases as Differential Diagnoses to rule out
-        const differentials: DifferentialDiagnosis[] = candidateMatches.slice(1, 4).map(item => ({
-          disease: item.rule.name,
-          confidence: item.calculatedConfidence,
-          riskLevel: item.calibratedRisk,
-          matchedSymptoms: [...item.coreMatched, ...item.suppMatched].map(
-            id => SYMPTOMS_LIST.find(s => s.id === id)?.name || id
-          ),
-          differentiationNote: item.rule.differentiationNote,
-          specialist: item.rule.specialist
-        }));
-
-        const result: DiseasePrediction = {
-          disease: topCandidate.rule.name,
-          confidence: topCandidate.calculatedConfidence,
-          riskLevel: topCandidate.calibratedRisk,
-          matchedSymptoms: [...topCandidate.coreMatched, ...topCandidate.suppMatched].map(
-            id => SYMPTOMS_LIST.find(s => s.id === id)?.name || id
-          ),
-          description: topCandidate.rule.description,
-          precautions: topCandidate.rule.precautions,
-          recommendedSpecialist: topCandidate.rule.specialist,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          differentials,
-          poweredBy: 'Gemini-Trained Clinical Diagnostic Engine'
-        };
-
-        setPredictionResult(result);
-      } else {
-        // Fallback generic benign guidance
-        setPredictionResult({
-          disease: 'Benign Transient Fatigue & Daily Strain',
-          confidence: 92,
-          riskLevel: 'Low',
-          matchedSymptoms: selectedSymptoms.map(id => SYMPTOMS_LIST.find(s => s.id === id)?.name || id),
-          description: 'Observed symptoms do not indicate an acute illness. Mild fatigue or minor discomfort is commonly self-resolving with restorative rest.',
-          precautions: [
-            'Maintain optimal oral hydration and 7-8 hours of sleep',
-            'Take periodic breaks and practice relaxation',
-            'Consult your primary care physician for routine wellness reviews'
-          ],
-          recommendedSpecialist: 'General Physician / Self-Care',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          differentials: [],
-          poweredBy: 'Gemini-Trained Clinical Diagnostic Engine'
-        });
-      }
-
-      setIsPredicting(false);
-    }, 450);
   };
 
   // Run Diabetes Prediction (Calibrated clinical thresholds)
@@ -394,8 +383,8 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         probability,
         riskCategory,
         clinicalSummary: probability <= 30
-          ? `Patient exhibits a low statistical probability (${probability}%) of impaired fasting glucose. Fasting blood sugar (${diabetesInput.glucose} mg/dL) and body mass index reflect healthy metabolic regulation.`
-          : `Patient exhibits an evaluated ${probability}% probability of impaired fasting glycemia or Type 2 Diabetes based on biometric and metabolic features.`,
+          ? `Patient exhibits a low statistical likelihood of impaired fasting glucose. Fasting blood sugar (${diabetesInput.glucose} mg/dL) and body mass index reflect healthy metabolic regulation.`
+          : `Patient exhibits an evaluated risk profile of impaired fasting glycemia or Type 2 Diabetes based on biometric and metabolic features.`,
         lifestyleAdvice: [
           'Maintain a balanced whole-food diet rich in soluble fiber and lean protein',
           'Aim for at least 150 minutes of moderate aerobic activity weekly',
@@ -404,7 +393,7 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         testedDate: new Date().toISOString().split('T')[0]
       });
       setIsPredicting(false);
-    }, 400);
+    }, 100);
   };
 
   // Run Heart Disease Prediction (Calibrated clinical thresholds)
@@ -433,8 +422,8 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         probability,
         riskCategory,
         clinicalSummary: probability <= 30
-          ? `Cardiovascular evaluation demonstrates a reassuring ${probability}% probability score. Resting blood pressure (${heartInput.restingBP} mmHg) and lipid profile indicate stable, healthy coronary hemodynamics.`
-          : `Assessment identifies an evaluated ${probability}% probability of significant coronary artery plaque narrowing based on hemodynamic and cardiac markers.`,
+          ? `Cardiovascular evaluation demonstrates a reassuring profile. Resting blood pressure (${heartInput.restingBP} mmHg) and lipid profile indicate stable, healthy coronary hemodynamics.`
+          : `Assessment identifies an evaluated risk of significant coronary artery plaque narrowing based on hemodynamic and cardiac markers.`,
         lifestyleAdvice: [
           'Maintain regular moderate cardiovascular exercise (30 mins walking/cycling)',
           'Adopt the AHA recommended heart-healthy Mediterranean diet',
@@ -443,7 +432,7 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         testedDate: new Date().toISOString().split('T')[0]
       });
       setIsPredicting(false);
-    }, 400);
+    }, 100);
   };
 
   // Run Parkinson's Prediction (Calibrated clinical thresholds)
@@ -466,8 +455,8 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         probability,
         riskCategory,
         clinicalSummary: probability <= 30
-          ? `Neuro-motor assessment indicates a very low ${probability}% correlation. Fine motor speed (${parkinsonInput.motorSpeedScore}/100) and resting tremor frequency are well within healthy physiological ranges.`
-          : `Neuro-motor screening indicates a ${probability}% diagnostic correlation with early-stage parkinsonian motor patterns.`,
+          ? `Neuro-motor assessment indicates a very low risk correlation. Fine motor speed (${parkinsonInput.motorSpeedScore}/100) and resting tremor frequency are well within healthy physiological ranges.`
+          : `Neuro-motor screening indicates a diagnostic risk correlation with early-stage parkinsonian motor patterns.`,
         lifestyleAdvice: [
           'Engage in daily coordination and balance exercises (such as yoga or tai chi)',
           'Ensure consistent restful sleep to maintain neurological restoration',
@@ -476,7 +465,7 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         testedDate: new Date().toISOString().split('T')[0]
       });
       setIsPredicting(false);
-    }, 400);
+    }, 100);
   };
 
   // Run Chronic Kidney Disease (CKD) Prediction
@@ -507,8 +496,8 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         probability,
         riskCategory,
         clinicalSummary: probability <= 30
-          ? `Renal profile reflects healthy, preserved kidney function (${probability}% probability). Glomerular filtration rate (eGFR ${kidneyInput.egfr} mL/min) and serum creatinine (${kidneyInput.creatinine} mg/dL) are completely normal.`
-          : `Renal profile indicates a ${probability}% clinical probability of impaired glomerular clearance consistent with KDIGO guidelines.`,
+          ? `Renal profile reflects healthy, preserved kidney function. Glomerular filtration rate (eGFR ${kidneyInput.egfr} mL/min) and serum creatinine (${kidneyInput.creatinine} mg/dL) are completely normal.`
+          : `Renal profile indicates a clinical likelihood of impaired glomerular clearance consistent with KDIGO guidelines.`,
         lifestyleAdvice: [
           'Drink 2.5 to 3.0 liters of clean water daily for optimal kidney perfusion',
           'Keep sodium consumption moderate (<2,300 mg daily)',
@@ -517,7 +506,7 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         testedDate: new Date().toISOString().split('T')[0]
       });
       setIsPredicting(false);
-    }, 400);
+    }, 100);
   };
 
   // Run Hypertension & Stroke Prediction
@@ -546,8 +535,8 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         probability,
         riskCategory,
         clinicalSummary: probability <= 30
-          ? `Cerebrovascular risk profile is low and reassuring (${probability}%). Resting blood pressure (${strokeInput.systolicBP}/${strokeInput.diastolicBP} mmHg) and vascular health indicators show no signs of acute cerebral compromise.`
-          : `Cerebrovascular evaluation identifies an evaluated ${probability}% probability based on vascular hemodynamic biomarkers and stroke risk factors.`,
+          ? `Cerebrovascular risk profile is low and reassuring. Resting blood pressure (${strokeInput.systolicBP}/${strokeInput.diastolicBP} mmHg) and vascular health indicators show no signs of acute cerebral compromise.`
+          : `Cerebrovascular evaluation identifies an evaluated risk based on vascular hemodynamic biomarkers and stroke risk factors.`,
         lifestyleAdvice: [
           'Maintain regular ambulatory blood pressure checks',
           'Practice daily brisk walking to promote cerebral microvascular flow',
@@ -556,7 +545,7 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         testedDate: new Date().toISOString().split('T')[0]
       });
       setIsPredicting(false);
-    }, 400);
+    }, 100);
   };
 
   // Run Liver Disease / NASH Prediction
@@ -582,8 +571,8 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         probability,
         riskCategory,
         clinicalSummary: probability <= 30
-          ? `Hepatic enzyme profile is optimal and reassuring (${probability}% probability). Transaminases (ALT ${liverInput.alt} U/L, AST ${liverInput.ast} U/L) and bilirubin (${liverInput.bilirubin} mg/dL) demonstrate healthy liver metabolism.`
-          : `Model evaluation indicates a ${probability}% diagnostic index for hepatic steatosis or transaminase elevation based on the FIB-4 non-invasive index.`,
+          ? `Hepatic enzyme profile is optimal and reassuring. Transaminases (ALT ${liverInput.alt} U/L, AST ${liverInput.ast} U/L) and bilirubin (${liverInput.bilirubin} mg/dL) demonstrate healthy liver metabolism.`
+          : `Model evaluation indicates a diagnostic index for hepatic steatosis or transaminase elevation based on the FIB-4 non-invasive index.`,
         lifestyleAdvice: [
           'Continue a wholesome Mediterranean-style whole-food diet',
           'Maintain zero or minimal alcohol intake to safeguard hepatic hepatocytes',
@@ -592,7 +581,7 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         testedDate: new Date().toISOString().split('T')[0]
       });
       setIsPredicting(false);
-    }, 400);
+    }, 100);
   };
 
   // Run COPD & Asthma Prediction
@@ -622,8 +611,8 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         probability,
         riskCategory,
         clinicalSummary: probability <= 30
-          ? `Pulmonary mechanics reflect healthy, clear airflow (${probability}% probability). The spirometric ratio (FEV1/FVC ${copdInput.fev1FvcRatio}%) confirms unobstructed bronchial ventilation.`
-          : `Spirometry and symptomatology correlate with an evaluated ${probability}% likelihood of persistent bronchial airway obstruction.`,
+          ? `Pulmonary mechanics reflect healthy, clear airflow. The spirometric ratio (FEV1/FVC ${copdInput.fev1FvcRatio}%) confirms unobstructed bronchial ventilation.`
+          : `Spirometry and symptomatology correlate with an evaluated likelihood of persistent bronchial airway obstruction.`,
         lifestyleAdvice: [
           'Maintain smoke-free indoor environments and avoid biomass fumes',
           'Practice deep diaphragmatic breathing or aerobic conditioning',
@@ -632,7 +621,7 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
         testedDate: new Date().toISOString().split('T')[0]
       });
       setIsPredicting(false);
-    }, 400);
+    }, 100);
   };
 
   const handleSaveToRecords = (title: string, summary: string, notes?: string) => {
@@ -669,10 +658,6 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
               <h1 className="text-2xl font-black text-slate-900">
                 {t.symptomChecker}
               </h1>
-              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 shadow-xs">
-                <Sparkles className="w-3 h-3 text-blue-600" />
-                Gemini &amp; ChatGPT Aligned AI
-              </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Accurate, evidence-based symptom risk analysis and clinical guidance trained on medical reasoning frameworks.
@@ -867,24 +852,13 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
               <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5 animate-fadeIn">
                 
                 {/* Primary Condition Header */}
-                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-blue-600" />
-                        {predictionResult.poweredBy || 'Gemini 3.8 Flash Clinical AI'}
-                      </span>
-                    </div>
-                    <h3 className="text-xl font-black text-slate-900 mt-1">
-                      {predictionResult.disease}
-                    </h3>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-3xl font-black text-blue-600">
-                      {predictionResult.confidence}%
-                    </div>
-                    <span className="text-[10px] font-semibold text-slate-500">Diagnostic Match</span>
-                  </div>
+                <div className="border-b border-slate-100 pb-4">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    Evaluated Condition
+                  </span>
+                  <h3 className="text-xl font-black text-slate-900">
+                    {predictionResult.disease}
+                  </h3>
                 </div>
 
                 {/* CALM REASSURANCE BANNER BASED ON SEVERITY */}
@@ -993,9 +967,6 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
                         <div key={idx} className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white transition-all space-y-1.5">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-slate-900">{diff.disease}</span>
-                            <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
-                              {diff.confidence}% Match
-                            </span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] text-slate-500">Risk:</span>
@@ -1024,8 +995,8 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
                   <button
                     type="button"
                     onClick={() => handleSaveToRecords(
-                      `Predicted: ${predictionResult.disease}`,
-                      `Confidence: ${predictionResult.confidence}% (${predictionResult.riskLevel} Risk). Recommended: ${predictionResult.recommendedSpecialist}.`,
+                      `Evaluated: ${predictionResult.disease}`,
+                      `Classification: ${predictionResult.riskLevel} Risk. Recommended Specialist: ${predictionResult.recommendedSpecialist}.`,
                       `Symptoms logged: ${predictionResult.matchedSymptoms.join(', ')}`
                     )}
                     className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
@@ -1160,15 +1131,9 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
           <div className="lg:col-span-5">
             {diabetesResult ? (
               <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4 animate-fadeIn">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Screening Result</span>
-                    <h4 className="text-lg font-black text-slate-900">{diabetesResult.condition}</h4>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-black text-blue-600">{diabetesResult.probability}%</span>
-                    <span className="text-[10px] block font-semibold text-slate-400">Risk Probability</span>
-                  </div>
+                <div className="border-b border-slate-100 pb-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Screening Result</span>
+                  <h4 className="text-lg font-black text-slate-900">{diabetesResult.condition}</h4>
                 </div>
 
                 <div className={`p-3 rounded-xl text-xs font-bold ${
@@ -1314,15 +1279,9 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
           <div className="lg:col-span-5">
             {heartResult ? (
               <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4 animate-fadeIn">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Cardiology Assessment</span>
-                    <h4 className="text-lg font-black text-slate-900">{heartResult.condition}</h4>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-black text-rose-600">{heartResult.probability}%</span>
-                    <span className="text-[10px] block font-semibold text-slate-400">Risk Score</span>
-                  </div>
+                <div className="border-b border-slate-100 pb-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Cardiology Assessment</span>
+                  <h4 className="text-lg font-black text-slate-900">{heartResult.condition}</h4>
                 </div>
 
                 <div className={`p-3 rounded-xl text-xs font-bold ${
@@ -1455,15 +1414,9 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
           <div className="lg:col-span-5">
             {parkinsonResult ? (
               <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4 animate-fadeIn">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Neurology Screening</span>
-                    <h4 className="text-lg font-black text-slate-900">{parkinsonResult.condition}</h4>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-black text-indigo-600">{parkinsonResult.probability}%</span>
-                    <span className="text-[10px] block font-semibold text-slate-400">Match Probability</span>
-                  </div>
+                <div className="border-b border-slate-100 pb-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Neurology Screening</span>
+                  <h4 className="text-lg font-black text-slate-900">{parkinsonResult.condition}</h4>
                 </div>
 
                 <div className={`p-3 rounded-xl text-xs font-bold ${
@@ -1605,15 +1558,9 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
           <div className="lg:col-span-5">
             {kidneyResult ? (
               <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4 animate-fadeIn">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Nephrology Model</span>
-                    <h4 className="text-lg font-black text-slate-900">{kidneyResult.condition}</h4>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-black text-teal-600">{kidneyResult.probability}%</span>
-                    <span className="text-[10px] block font-semibold text-slate-400">Risk Severity</span>
-                  </div>
+                <div className="border-b border-slate-100 pb-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Nephrology Model</span>
+                  <h4 className="text-lg font-black text-slate-900">{kidneyResult.condition}</h4>
                 </div>
 
                 <div className={`p-3 rounded-xl text-xs font-bold ${
@@ -1745,15 +1692,9 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
           <div className="lg:col-span-5">
             {strokeResult ? (
               <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4 animate-fadeIn">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Cerebrovascular ML</span>
-                    <h4 className="text-lg font-black text-slate-900">{strokeResult.condition}</h4>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-black text-purple-600">{strokeResult.probability}%</span>
-                    <span className="text-[10px] block font-semibold text-slate-400">Risk Score</span>
-                  </div>
+                <div className="border-b border-slate-100 pb-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Cerebrovascular ML</span>
+                  <h4 className="text-lg font-black text-slate-900">{strokeResult.condition}</h4>
                 </div>
 
                 <div className={`p-3 rounded-xl text-xs font-bold ${
@@ -1882,15 +1823,9 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
           <div className="lg:col-span-5">
             {liverResult ? (
               <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4 animate-fadeIn">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Hepatology Assessment</span>
-                    <h4 className="text-lg font-black text-slate-900">{liverResult.condition}</h4>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-black text-amber-600">{liverResult.probability}%</span>
-                    <span className="text-[10px] block font-semibold text-slate-400">Risk Severity</span>
-                  </div>
+                <div className="border-b border-slate-100 pb-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Hepatology Assessment</span>
+                  <h4 className="text-lg font-black text-slate-900">{liverResult.condition}</h4>
                 </div>
 
                 <div className={`p-3 rounded-xl text-xs font-bold ${
@@ -2029,15 +1964,9 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
           <div className="lg:col-span-5">
             {copdResult ? (
               <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4 animate-fadeIn">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Pulmonology Model</span>
-                    <h4 className="text-lg font-black text-slate-900">{copdResult.condition}</h4>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-black text-cyan-600">{copdResult.probability}%</span>
-                    <span className="text-[10px] block font-semibold text-slate-400">Risk Severity</span>
-                  </div>
+                <div className="border-b border-slate-100 pb-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Pulmonology Model</span>
+                  <h4 className="text-lg font-black text-slate-900">{copdResult.condition}</h4>
                 </div>
 
                 <div className={`p-3 rounded-xl text-xs font-bold ${

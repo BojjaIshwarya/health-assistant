@@ -65,6 +65,7 @@ export interface DiseasePrediction {
   recommendedSpecialist: string;
   timestamp: string;
   differentials?: DifferentialDiagnosis[];
+  calmReassurance?: string;
   poweredBy?: string;
 }
 

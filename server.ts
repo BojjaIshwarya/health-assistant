@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 
 dotenv.config();
@@ -15,11 +15,18 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
-// Initialize GoogleGenAI if key available
+// Initialize GoogleGenAI if key available with User-Agent telemetry
 const apiKey = process.env.GEMINI_API_KEY;
 let ai: GoogleGenAI | null = null;
 if (apiKey) {
-  ai = new GoogleGenAI({ apiKey });
+  ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
 }
 
 // Health check endpoint
@@ -30,6 +37,18 @@ app.get('/api/health', (req, res) => {
     model: 'gemini-3.8-flash'
   });
 });
+
+// Fast timeout wrapper to prevent latency spikes or slow AI calls
+async function generateWithTimeout(params: any, timeoutMs = 2800): Promise<any> {
+  if (!ai) throw new Error('Gemini not configured');
+  
+  return Promise.race([
+    ai.models.generateContent(params),
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('AI response timed out')), timeoutMs)
+    )
+  ]);
+}
 
 // Symptom Analysis Endpoint powered by Gemini 3.8 Flash
 app.post('/api/analyze-symptoms', async (req, res) => {
@@ -79,25 +98,38 @@ Respond ONLY with valid JSON conforming strictly to this JSON format (no markdow
   ]
 }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        temperature: 0.2
-      }
-    });
+    let response: any;
+    try {
+      response = await generateWithTimeout({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          responseMimeType: 'application/json'
+        }
+      }, 2500);
+    } catch (primaryErr: any) {
+      // If primary is slow or experiences high demand (503), immediately try flash-lite
+      console.warn('Primary model slow or unavailable, trying flash-lite:', primaryErr?.message);
+      response = await generateWithTimeout({
+        model: 'gemini-3.1-flash-lite',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json'
+        }
+      }, 2000);
+    }
 
-    const text = response.text?.trim() || '{}';
+    const text = response?.text?.trim() || '{}';
     const parsed = JSON.parse(text);
-    return res.json({ success: true, data: parsed, poweredBy: 'Gemini 3.8 Flash' });
+    return res.json({ success: true, data: parsed, poweredBy: 'Gemini AI' });
   } catch (error: any) {
-    console.error('Error in /api/analyze-symptoms:', error?.message || error);
-    return res.status(200).json({ fallback: true, error: error?.message || 'Server error' });
+    console.error('Fast fallback active for /api/analyze-symptoms:', error?.message || error);
+    return res.status(200).json({ fallback: true, error: error?.message || 'Server timeout' });
   }
 });
 
-// Chat endpoint powered by Gemini 3.8 Flash
+// Chat endpoint powered by Gemini (Fast Low-Latency Response)
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, language, userProfile } = req.body;
@@ -107,23 +139,49 @@ app.post('/api/chat', async (req, res) => {
       return res.json({ fallback: true, message: 'Gemini API key not configured' });
     }
 
-    const prompt = `You are a compassionate, medically accurate, and calm health assistant modeled after Gemini Health.
+    const prompt = `You are HealthAssist AI, a compassionate, medically accurate, and friendly personal health assistant.
 The user's preferred language code is: "${language}".
-IMPORTANT RULE: You MUST reply in the exact language requested (e.g. Hindi if hi, Telugu if te, Tamil if ta, Kannada if kn, Malayalam if ml, Marathi if mr, Bengali if bn, Gujarati if gu, Punjabi if pa, Odia if or, Assamese if as, English if en).
-User query: "${message}".
+IMPORTANT LANGUAGE INSTRUCTION: Reply naturally and fluently in the user's requested language (${language}).
+
+User Query: "${message}".
 User profile: ${JSON.stringify(userProfile || {})}.
 
-Provide a clear, accurate, calm, and reassuring medical response. If symptoms are mild or everyday, reassure the user and offer practical home care remedies. If symptoms could be serious, calmly explain the recommended outpatient steps without causing undue panic.`;
+Instructions for your response:
+1. DIRECTLY and specifically address the user's inquiry with targeted medical insight, practical remedies, and clear explanations.
+2. Format your response cleanly and engagingly using Markdown:
+   - Use clean, concise paragraphs.
+   - Use bold headings (### or **) for clear sectioning (e.g., Potential Causes, Practical Self-Care, When to See a Doctor).
+   - Use bullet points for actionable steps, foods, or exercises.
+   - If urgent medical attention is needed, highlight it with a clear warning callout.
+3. Keep the tone empathetic, reassuring, and conversational. Avoid repetitive robotic filler.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        temperature: 0.3
+    let response: any;
+    const candidateModels = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+    let lastError: any = null;
+
+    for (const model of candidateModels) {
+      try {
+        const config: any = {};
+        if (model === 'gemini-3.8-flash') {
+          config.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
+        }
+        response = await generateWithTimeout({
+          model,
+          contents: prompt,
+          ...(Object.keys(config).length > 0 ? { config } : {})
+        }, 10000);
+        if (response?.text) break;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Model ${model} failed in /api/chat:`, err?.message || err);
       }
-    });
+    }
 
-    return res.json({ success: true, reply: response.text?.trim() });
+    if (!response?.text) {
+      throw lastError || new Error('All candidate models failed');
+    }
+
+    return res.json({ success: true, reply: response.text.trim() });
   } catch (error: any) {
     console.error('Error in /api/chat:', error?.message || error);
     return res.status(200).json({ fallback: true, error: error?.message || 'Server error' });

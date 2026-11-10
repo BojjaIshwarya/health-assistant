@@ -107,7 +107,7 @@ export const EmotionSentimentCenter: React.FC<EmotionSentimentCenterProps> = ({
       setActiveCheck(newCheck);
       setInputText('');
       setIsAnalyzing(false);
-    }, 600);
+    }, 100);
   };
 
   return (

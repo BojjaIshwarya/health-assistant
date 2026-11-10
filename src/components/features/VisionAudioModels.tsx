@@ -53,7 +53,7 @@ export const VisionAudioModels: React.FC<VisionAudioModelsProps> = ({
     setTimeout(() => {
       setVisionResult(SAMPLE_VISION_CASES[key]);
       setIsScanningVision(false);
-    }, 600);
+    }, 120);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,7 +79,7 @@ export const VisionAudioModels: React.FC<VisionAudioModelsProps> = ({
           recommendation: 'Visual features correspond to superficial inflammatory rash. Apply barrier protection and observe for 48 hours; consult a physician if spreading.'
         });
         setIsScanningVision(false);
-      }, 800);
+      }, 120);
     };
     reader.readAsDataURL(file);
   };
@@ -136,7 +136,7 @@ export const VisionAudioModels: React.FC<VisionAudioModelsProps> = ({
     setTimeout(() => {
       setAudioResult(SAMPLE_AUDIO_CASES[key]);
       setIsAnalyzingAudio(false);
-    }, 700);
+    }, 120);
   };
 
   return (
