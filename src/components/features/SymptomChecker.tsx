@@ -320,7 +320,7 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
     // Non-blocking background AI enhancement via server endpoint
     const symptomNames = selectedSymptoms.map(id => SYMPTOMS_LIST.find(s => s.id === id)?.name || id);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2400);
+    const timer = setTimeout(() => controller.abort(), 22000);
 
     fetch('/api/analyze-symptoms', {
       method: 'POST',
@@ -531,14 +531,14 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
       const riskCategory = probability > 60 ? 'High Risk' : probability > 30 ? 'Moderate Risk' : 'Low Risk';
 
       setStrokeResult({
-        condition: 'Cerebrovascular Stroke & Hemodynamic Assessment',
+        condition: 'Stroke & Circulation Health Check',
         probability,
         riskCategory,
         clinicalSummary: probability <= 30
-          ? `Cerebrovascular risk profile is low and reassuring. Resting blood pressure (${strokeInput.systolicBP}/${strokeInput.diastolicBP} mmHg) and vascular health indicators show no signs of acute cerebral compromise.`
-          : `Cerebrovascular evaluation identifies an evaluated risk based on vascular hemodynamic biomarkers and stroke risk factors.`,
+          ? `Your stroke check looks reassuring and low-risk. Your resting blood pressure (${strokeInput.systolicBP}/${strokeInput.diastolicBP} mmHg) and heart health notes look steady.`
+          : `This check notes a higher chance of blood-vessel or stroke risk factors based on the blood pressure and health details entered.`,
         lifestyleAdvice: [
-          'Maintain regular ambulatory blood pressure checks',
+          'Keep track of your resting blood pressure regularly',
           'Practice daily brisk walking to promote cerebral microvascular flow',
           'Ensure low-sodium nutrition and limit dietary saturated fats'
         ],
@@ -654,13 +654,11 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
           </button>
 
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-black text-slate-900">
-                {t.symptomChecker}
-              </h1>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Accurate, evidence-based symptom risk analysis and clinical guidance trained on medical reasoning frameworks.
+            <h1 className="text-2xl font-black text-slate-900">
+              {t.symptomChecker}
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Take a calm step forward — check how you feel in everyday words and see gentle, practical care suggestions.
             </p>
           </div>
         </div>
@@ -1174,10 +1172,10 @@ export const SymptomChecker: React.FC<SymptomCheckerProps> = ({
           <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
             <div className="border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900">
-                Cardiovascular Disease Risk Model
+                Heart Health Check
               </h3>
               <p className="text-xs text-slate-500">
-                AHA Framingham-calibrated assessment on hemodynamics, angina presence, and exercise ECG ST depression.
+                Simple heart screening based on blood pressure, cholesterol, chest comfort, and activity response.
               </p>
             </div>
 

@@ -4,6 +4,7 @@ import {
   ThemeMode,
   HealthRecordEntry, 
   ChatMessage, 
+  ChatSession,
   DailyDietPlan, 
   EmotionSentimentCheck 
 } from '../types';
@@ -126,6 +127,19 @@ export const addHealthRecord = (userId: string, record: HealthRecordEntry): void
   }
 };
 
+export const deleteHealthRecord = (userId: string, recordId: string): HealthRecordEntry[] => {
+  try {
+    if (!userId) return [];
+    const existing = getHealthRecords(userId);
+    const updated = existing.filter((r) => r.id !== recordId);
+    localStorage.setItem(`healthassist_records_${userId}`, JSON.stringify(updated));
+    return updated;
+  } catch (e) {
+    console.error('Failed to delete record', e);
+    return getHealthRecords(userId);
+  }
+};
+
 export const getChatHistory = (userId: string, userName: string = 'User'): ChatMessage[] => {
   try {
     if (!userId) return [];
@@ -153,6 +167,96 @@ export const saveChatHistory = (userId: string, messages: ChatMessage[]): void =
   } catch (e) {
     console.error('Failed to save chat', e);
   }
+};
+
+export const getChatSessions = (userId: string): ChatSession[] => {
+  try {
+    if (!userId) return [];
+    const sessionsKey = `healthassist_chat_sessions_${userId}`;
+    const raw = localStorage.getItem(sessionsKey);
+    if (raw) {
+      const parsed: ChatSession[] = JSON.parse(raw);
+      return parsed.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    }
+
+    // One-time migration from legacy single chat key if it had user messages
+    const legacyRaw = localStorage.getItem(`healthassist_chat_${userId}`);
+    if (legacyRaw) {
+      const legacyMessages: ChatMessage[] = JSON.parse(legacyRaw);
+      const firstUserMsg = legacyMessages.find(m => m.sender === 'user');
+      if (firstUserMsg) {
+        const nowIso = new Date().toISOString();
+        const migrated: ChatSession = {
+          id: `session_migrated_${Date.now()}`,
+          title: firstUserMsg.text.slice(0, 48) + (firstUserMsg.text.length > 48 ? '...' : ''),
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          messages: legacyMessages,
+        };
+        localStorage.setItem(sessionsKey, JSON.stringify([migrated]));
+        localStorage.removeItem(`healthassist_chat_${userId}`);
+        return [migrated];
+      }
+      localStorage.removeItem(`healthassist_chat_${userId}`);
+    }
+
+    return [];
+  } catch {
+    return [];
+  }
+};
+
+export const saveChatSessions = (userId: string, sessions: ChatSession[]): void => {
+  if (!userId) return;
+  const sessionsKey = `healthassist_chat_sessions_${userId}`;
+  const sorted = [...sessions].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+
+  try {
+    localStorage.setItem(sessionsKey, JSON.stringify(sorted));
+  } catch {
+    // Handle localStorage quota overflow by pruning heavy base64 dataUrls from older sessions
+    try {
+      const compacted = sorted.map((s, idx) => {
+        if (idx === 0) return s;
+        return {
+          ...s,
+          messages: s.messages.map(m =>
+            m.attachment && m.attachment.dataUrl.length > 1000
+              ? {
+                  ...m,
+                  attachment: {
+                    ...m.attachment,
+                    dataUrl: '',
+                  },
+                }
+              : m
+          ),
+        };
+      });
+      localStorage.setItem(sessionsKey, JSON.stringify(compacted));
+    } catch (err) {
+      console.error('Failed to save chat sessions', err);
+    }
+  }
+};
+
+export const upsertChatSession = (userId: string, session: ChatSession): ChatSession[] => {
+  const existing = getChatSessions(userId);
+  const idx = existing.findIndex(s => s.id === session.id);
+  const updated = idx >= 0
+    ? existing.map(s => (s.id === session.id ? session : s))
+    : [session, ...existing];
+  saveChatSessions(userId, updated);
+  return getChatSessions(userId);
+};
+
+export const deleteChatSession = (userId: string, sessionId: string): ChatSession[] => {
+  const existing = getChatSessions(userId);
+  const updated = existing.filter(s => s.id !== sessionId);
+  saveChatSessions(userId, updated);
+  return updated;
 };
 
 export const getDietPlan = (userId: string, goal: string = 'Balanced Maintenance'): DailyDietPlan => {

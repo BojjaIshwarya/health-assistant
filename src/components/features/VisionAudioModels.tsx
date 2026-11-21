@@ -1,28 +1,208 @@
-import React, { useState } from 'react';
-import { 
-  ArrowLeft, 
-  Eye, 
-  Mic, 
-  Upload, 
-  Activity, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Play, 
-  Square, 
-  Volume2, 
-  Sparkles, 
-  Layers,
-  FileSearch,
-  Scan
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ArrowLeft,
+  Camera,
+  Mic,
+  Square,
+  Upload,
+  CheckCircle2,
+  Play,
+  Volume2,
+  Loader2,
+  AlertCircle,
+  Sparkles,
+  FileAudio,
+  RotateCcw,
 } from 'lucide-react';
-import { SupportedLanguage, UserProfile, VisionModelResult, AudioModelResult } from '../../types';
+import { SupportedLanguage, UserProfile } from '../../types';
 import { TRANSLATIONS } from '../../translations';
-import { SAMPLE_VISION_CASES, SAMPLE_AUDIO_CASES } from '../../data/mockData';
+import { FormattedChatMessage } from './FormattedChatMessage';
+import photoVoiceImg from '../../assets/images/photo_voice_checkin_1795259460982.jpg';
 
 interface VisionAudioModelsProps {
   language: SupportedLanguage;
   currentUser: UserProfile;
   onBack: () => void;
+}
+
+interface PhotoGuideExample {
+  id: 'skin_rash' | 'xray_normal' | 'mole_benign';
+  title: string;
+  subtitle: string;
+  categoryLabel: string;
+  comfortLevel: string;
+  summary: string;
+  whatToNotice: string[];
+  nextSteps: string;
+}
+
+interface SoundGuideExample {
+  id: 'normal_breath' | 'wheezing' | 'chest_cough';
+  title: string;
+  subtitle: string;
+  patternLabel: string;
+  summary: string;
+  observations: string[];
+  careTips: string;
+}
+
+const PHOTO_EXAMPLES: PhotoGuideExample[] = [
+  {
+    id: 'skin_rash',
+    title: 'Mild Skin Irritation or Rash',
+    subtitle: 'Redness, dryness, or itchiness guide',
+    categoryLabel: 'Skin & Everyday Care',
+    comfortLevel: 'Often mild & manageable at home',
+    summary:
+      'Mild contact irritation often appears as gentle surface redness after touching a new soap, plant, detergent, or warm sweat.',
+    whatToNotice: [
+      'Check if the area feels itchy, warm, or slightly dry on the surface',
+      'Look at whether borders stay steady rather than spreading rapidly',
+      'Think back over the last 24 hours for new creams, soaps, or fabrics',
+    ],
+    nextSteps:
+      'Wash gently with plain cool water, apply a fragrance-free moisturizer, and keep the area uncovered. See a doctor if swelling grows, blisters form, or fever appears.',
+  },
+  {
+    id: 'xray_normal',
+    title: 'Clear Chest X-Ray Guide',
+    subtitle: 'Understanding a healthy chest scan',
+    categoryLabel: 'Breathing & Chest Wellness',
+    comfortLevel: 'Helpful example for doctor visits',
+    summary:
+      'In a clear chest X-ray, both lungs appear evenly dark and open because healthy air spaces let light rays pass through cleanly.',
+    whatToNotice: [
+      'Even, open air space on both left and right sides of the chest',
+      'Clear sharp corners along the lower edges of the lungs',
+      'Balanced central heart outline without crowding',
+    ],
+    nextSteps:
+      'Always review your official radiology report together with your doctor, who compares the image with how you are feeling day to day.',
+  },
+  {
+    id: 'mole_benign',
+    title: 'Everyday Skin Spot Check',
+    subtitle: 'Simple ABCDE self-check guide',
+    categoryLabel: 'Skin Awareness',
+    comfortLevel: 'Routine monthly awareness',
+    summary:
+      'Most common skin spots stay small, round, and single-colored over time. A quick monthly glance helps you spot changes early.',
+    whatToNotice: [
+      'Even, smooth edges and consistent light-to-medium brown shade',
+      'Smaller than a pencil eraser (about 6 mm across)',
+      'Looks much the same month after month without bleeding or crusting',
+    ],
+    nextSteps:
+      'Use broad-spectrum sunscreen daily when outdoors. Visit a dermatologist if any spot quickly changes shape, size, or color.',
+  },
+];
+
+const SOUND_EXAMPLES: SoundGuideExample[] = [
+  {
+    id: 'normal_breath',
+    title: 'Calm, Clear Breathing',
+    subtitle: 'Smooth steady airflow',
+    patternLabel: 'Clear & Unhurried',
+    summary:
+      'Healthy breathing sounds soft, smooth, and rhythmic—like gentle breeze passing easily in and out without whistling or rattling.',
+    observations: [
+      'Easy, comfortable pace without straining shoulders or neck',
+      'Breathing out feels relaxed and slightly longer than breathing in',
+      'No whistling, crackling, or sudden catches in the throat',
+    ],
+    careTips:
+      'A few slow, deep breaths each morning help relax the chest and calm the nervous system.',
+  },
+  {
+    id: 'wheezing',
+    title: 'Mild Wheezing Sound',
+    subtitle: 'Soft whistling when breathing out',
+    patternLabel: 'Narrowed Airway Whistling',
+    summary:
+      'Wheezing is a soft, high-pitched whistling sound—most noticeable while breathing out—when airways feel slightly tight or sensitive.',
+    observations: [
+      'Musical whistling tone during exhaling',
+      'May show up after cold air, dust, pollen, or light exercise',
+      'Often eases when sitting upright in fresh, warm air',
+    ],
+    careTips:
+      'Sit upright, sip warm water, and use your prescribed inhaler if you have one. Seek medical care right away if catching your breath feels hard.',
+  },
+  {
+    id: 'chest_cough',
+    title: 'Dry or Chest Cough',
+    subtitle: 'Throat tickle or phlegm clearing',
+    patternLabel: 'Airway Clearing Reflex',
+    summary:
+      'Coughing is your body’s natural way of clearing throat irritation, seasonal dust, or mucus from breathing passages.',
+    observations: [
+      'Deeper chest rumble often means mucus is loosening up',
+      'Dry tickly coughs frequently worsen in dry indoor air at night',
+      'Staying hydrated makes throat secretions noticeably easier to clear',
+    ],
+    careTips:
+      'Try warm herbal tea with honey (for adults), steam inhalation, and raising your pillow slightly at night. Visit a clinic if a cough lasts over 2 weeks or comes with high fever.',
+  },
+];
+
+async function compressImageForAnalysis(
+  file: File
+): Promise<{ dataUrl: string; base64: string; mimeType: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const originalDataUrl = reader.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1024;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width >= height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve({
+            dataUrl: originalDataUrl,
+            base64: originalDataUrl.split(',')[1] || '',
+            mimeType: file.type || 'image/jpeg',
+          });
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL('image/jpeg', 0.85);
+        resolve({
+          dataUrl: compressed,
+          base64: compressed.split(',')[1] || '',
+          mimeType: 'image/jpeg',
+        });
+      };
+      img.onerror = () => reject(new Error('Could not read the selected image.'));
+      img.src = originalDataUrl;
+    };
+    reader.onerror = () => reject(new Error('Could not load the selected image.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = String(reader.result || '');
+      resolve(dataUrl.split(',')[1] || '');
+    };
+    reader.onerror = () => reject(new Error('Could not read audio clip.'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 export const VisionAudioModels: React.FC<VisionAudioModelsProps> = ({
@@ -31,473 +211,812 @@ export const VisionAudioModels: React.FC<VisionAudioModelsProps> = ({
   onBack,
 }) => {
   const t = TRANSLATIONS[language];
-  const [activeTab, setActiveTab] = useState<'vision' | 'audio'>('vision');
+  const [activeTab, setActiveTab] = useState<'photo' | 'voice'>('photo');
 
-  // Vision State
-  const [selectedVisionKey, setSelectedVisionKey] = useState<string>('skin_rash');
-  const [customImageUri, setCustomImageUri] = useState<string | null>(null);
-  const [isScanningVision, setIsScanningVision] = useState(false);
-  const [visionResult, setVisionResult] = useState<VisionModelResult | null>(SAMPLE_VISION_CASES['skin_rash']);
+  // Photo check state
+  const [selectedExampleId, setSelectedExampleId] = useState<string>('skin_rash');
+  const [customPhotoUrl, setCustomPhotoUrl] = useState<string | null>(null);
+  const [customPhotoBase64, setCustomPhotoBase64] = useState<string | null>(null);
+  const [customPhotoMime, setCustomPhotoMime] = useState<string>('image/jpeg');
+  const [photoQuestion, setPhotoQuestion] = useState('');
+  const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
+  const [photoAiReply, setPhotoAiReply] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
-  // Audio State
-  const [selectedAudioKey, setSelectedAudioKey] = useState<string>('wheezing');
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  // Voice & Breathing check state
+  const [selectedSoundId, setSelectedSoundId] = useState<string>('normal_breath');
+  const [isPlayingExample, setIsPlayingExample] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSec, setRecordingSec] = useState(0);
+  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
+  const [recordedAudioBase64, setRecordedAudioBase64] = useState<string | null>(null);
+  const [recordedAudioMime, setRecordedAudioMime] = useState<string>('audio/webm');
+  const [voiceQuestion, setVoiceQuestion] = useState('');
   const [isAnalyzingAudio, setIsAnalyzingAudio] = useState(false);
-  const [audioResult, setAudioResult] = useState<AudioModelResult | null>(SAMPLE_AUDIO_CASES['wheezing']);
+  const [audioAiReply, setAudioAiReply] = useState<string | null>(null);
+  const [audioError, setAudioError] = useState<string | null>(null);
 
-  // Vision Case Selection
-  const handleSelectPresetVision = (key: string) => {
-    setSelectedVisionKey(key);
-    setCustomImageUri(null);
-    setIsScanningVision(true);
-    setTimeout(() => {
-      setVisionResult(SAMPLE_VISION_CASES[key]);
-      setIsScanningVision(false);
-    }, 120);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) window.clearInterval(timerRef.current);
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (recordedAudioUrl) {
+        URL.revokeObjectURL(recordedAudioUrl);
+      }
+    };
+  }, [recordedAudioUrl]);
+
+  const activePhotoExample =
+    PHOTO_EXAMPLES.find((e) => e.id === selectedExampleId) || PHOTO_EXAMPLES[0];
+  const activeSoundExample =
+    SOUND_EXAMPLES.find((e) => e.id === selectedSoundId) || SOUND_EXAMPLES[0];
+
+  const handleSelectPhotoExample = (id: string) => {
+    setSelectedExampleId(id);
+    setCustomPhotoUrl(null);
+    setCustomPhotoBase64(null);
+    setPhotoAiReply(null);
+    setPhotoError(null);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setPhotoError(null);
+    setPhotoAiReply(null);
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setCustomImageUri(event.target?.result as string);
-      setIsScanningVision(true);
-      setTimeout(() => {
-        // Clinical evaluation for uploaded image
-        setVisionResult({
-          condition: 'Dermatological Erythematous Plaque Screening',
-          confidence: 93.6,
-          category: 'Dermatological',
-          severity: 'Moderate',
-          findings: [
-            'Superficial vascular dilation detected in central ROI (Region of Interest)',
-            'Clear demarcation from adjacent healthy dermis',
-            'Absence of asymmetric irregular borders'
-          ],
-          recommendation: 'Visual features correspond to superficial inflammatory rash. Apply barrier protection and observe for 48 hours; consult a physician if spreading.'
-        });
-        setIsScanningVision(false);
-      }, 120);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Web Audio Synthetic Sound Generation for Respiratory Patterns
-  const playSyntheticAudioSample = (key: string) => {
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-
-      osc.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-
-      if (key === 'wheezing') {
-        // High pitched musical wheeze (440 - 650 Hz)
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(480, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(620, audioCtx.currentTime + 1.2);
-        gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 2.0);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 2.1);
-      } else if (key === 'bronchitic_cough') {
-        // Low coarse cough burst
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(180, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.4);
-        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.9);
-      } else {
-        // Normal breath
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(220, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 1.6);
-      }
-
-      setIsPlayingAudio(true);
-      setTimeout(() => setIsPlayingAudio(false), 2200);
-    } catch {
-      setIsPlayingAudio(false);
+      const compressed = await compressImageForAnalysis(file);
+      setCustomPhotoUrl(compressed.dataUrl);
+      setCustomPhotoBase64(compressed.base64);
+      setCustomPhotoMime(compressed.mimeType);
+      await analyzeUploadedPhoto(compressed.base64, compressed.mimeType, photoQuestion);
+    } catch (err: any) {
+      setPhotoError(err?.message || 'Unable to load your photo. Please try a JPG or PNG image.');
+    } finally {
+      e.target.value = '';
     }
   };
 
-  const handleSelectAudioSample = (key: string) => {
-    setSelectedAudioKey(key);
+  const analyzeUploadedPhoto = async (
+    base64Data: string,
+    mimeType: string,
+    note: string
+  ) => {
+    setIsAnalyzingPhoto(true);
+    setPhotoError(null);
+
+    try {
+      const prompt =
+        note.trim() ||
+        'Please look at this health-related photo and explain in simple, gentle, easy-to-understand language what it shows, simple home care steps if helpful, and when someone should see a doctor.';
+
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: prompt,
+          language,
+          userProfile: {
+            age: currentUser.age,
+            gender: currentUser.gender,
+            bloodGroup: currentUser.bloodGroup,
+          },
+          attachment: {
+            type: 'image',
+            mimeType,
+            base64: base64Data,
+          },
+        }),
+        signal: AbortSignal.timeout(45000),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && data.reply) {
+        setPhotoAiReply(data.reply);
+      } else {
+        setPhotoError(
+          data.error ||
+            'Could not review this photo right now. Please try a clearer close-up photo or ask in the Health Chatbot.'
+        );
+      }
+    } catch {
+      setPhotoError(
+        'The photo check took a bit too long. Please try again with a slightly smaller image.'
+      );
+    } finally {
+      setIsAnalyzingPhoto(false);
+    }
+  };
+
+  const playExampleSound = (id: string) => {
+    try {
+      const AudioContextCtor =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const audioCtx = new AudioContextCtor();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (id === 'wheezing') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(590, audioCtx.currentTime + 1.1);
+        gain.gain.setValueAtTime(0.14, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.8);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 1.85);
+      } else if (id === 'chest_cough') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(190, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(90, audioCtx.currentTime + 0.45);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.85);
+      } else {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 1.55);
+      }
+
+      setIsPlayingExample(true);
+      window.setTimeout(() => setIsPlayingExample(false), 1900);
+    } catch {
+      setIsPlayingExample(false);
+    }
+  };
+
+  const startVoiceRecording = async () => {
+    setAudioError(null);
+    setAudioAiReply(null);
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setAudioError('Your browser does not support microphone recording. You can upload an audio clip instead.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/mp4';
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size > 0) {
+          audioChunksRef.current.push(ev.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        stream.getTracks().forEach((tr) => tr.stop());
+        mediaStreamRef.current = null;
+
+        if (recordedAudioUrl) {
+          URL.revokeObjectURL(recordedAudioUrl);
+        }
+
+        const localUrl = URL.createObjectURL(blob);
+        const base64 = await blobToBase64(blob);
+        const cleanMime = mimeType.split(';')[0] || 'audio/webm';
+        setRecordedAudioUrl(localUrl);
+        setRecordedAudioBase64(base64);
+        setRecordedAudioMime(cleanMime);
+        await analyzeRecordedAudio(base64, cleanMime, voiceQuestion);
+      };
+
+      recorder.start(250);
+      setIsRecording(true);
+      setRecordingSec(0);
+      timerRef.current = window.setInterval(() => {
+        setRecordingSec((s) => s + 1);
+      }, 1000);
+    } catch {
+      setAudioError(
+        'Microphone permission was not granted. Please allow microphone access or upload a short voice recording.'
+      );
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setIsRecording(false);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  const handleAudioFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAudioError(null);
+    setAudioAiReply(null);
+
+    try {
+      const base64 = await blobToBase64(file);
+      const localUrl = URL.createObjectURL(file);
+      const mime = file.type || 'audio/mpeg';
+      if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
+      setRecordedAudioUrl(localUrl);
+      setRecordedAudioBase64(base64);
+      setRecordedAudioMime(mime);
+      await analyzeRecordedAudio(base64, mime, voiceQuestion);
+    } catch (err: any) {
+      setAudioError(err?.message || 'Unable to load audio file.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const analyzeRecordedAudio = async (
+    base64Data: string,
+    mimeType: string,
+    note: string
+  ) => {
     setIsAnalyzingAudio(true);
-    playSyntheticAudioSample(key);
-    setTimeout(() => {
-      setAudioResult(SAMPLE_AUDIO_CASES[key]);
+    setAudioError(null);
+
+    try {
+      const prompt =
+        note.trim() ||
+        'Please listen to this patient voice, breathing, or cough recording and respond with kind, easy-to-understand wellness guidance, calming care tips, and clear advice on when to visit a doctor.';
+
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: prompt,
+          language,
+          userProfile: {
+            age: currentUser.age,
+            gender: currentUser.gender,
+            bloodGroup: currentUser.bloodGroup,
+          },
+          attachment: {
+            type: 'audio',
+            mimeType,
+            base64: base64Data,
+          },
+        }),
+        signal: AbortSignal.timeout(45000),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && data.reply) {
+        setAudioAiReply(data.reply);
+      } else {
+        setAudioError(
+          data.error ||
+            'Could not analyze the audio right now. Try a clearer 5–15 second recording or type how you feel.'
+        );
+      }
+    } catch {
+      setAudioError(
+        'Audio check timed out. Please try a shorter recording or share how you are feeling in Health Chatbot.'
+      );
+    } finally {
       setIsAnalyzingAudio(false);
-    }, 120);
+    }
+  };
+
+  const resetCustomAudio = () => {
+    if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
+    setRecordedAudioUrl(null);
+    setRecordedAudioBase64(null);
+    setAudioAiReply(null);
+    setAudioError(null);
   };
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
-      
-      {/* Header & Back Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div className="flex items-center gap-3">
+      {/* Header & Friendly Tab Switcher */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-200">
+        <div className="flex items-start sm:items-center gap-3">
           <button
             type="button"
             onClick={onBack}
-            className="p-2.5 rounded-xl border border-slate-200 hover:border-teal-400 bg-white hover:bg-teal-50 text-slate-700 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+            className="p-2.5 rounded-xl border border-slate-200 hover:border-teal-400 bg-white hover:bg-teal-50 text-slate-700 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs shrink-0"
             title={t.backToDashboard}
           >
             <ArrowLeft className="w-4 h-4 text-teal-600" />
-            <span className="text-xs font-bold">{t.back}</span>
+            <span className="text-xs font-bold whitespace-nowrap">{t.back}</span>
           </button>
 
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-black text-slate-900">
-                {t.visionAudioModels}
-              </h1>
-              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800">
-                Deep Learning Multi-Modal (Page 720)
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Deep convolutional neural networks for visual pathology &amp; respiratory acoustic spectrography.
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+              {t.visionAudioModels}
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Share a clear photo or record a short voice or cough clip for gentle, easy-to-follow guidance.
             </p>
           </div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center p-1 bg-slate-100 rounded-2xl">
+        {/* Clean 2-Tab Control */}
+        <div className="flex items-center p-1 bg-slate-100 rounded-2xl shrink-0 self-start lg:self-auto">
           <button
             type="button"
-            onClick={() => setActiveTab('vision')}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'vision' ? 'bg-white text-cyan-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            onClick={() => setActiveTab('photo')}
+            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+              activeTab === 'photo'
+                ? 'bg-white text-teal-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Vision DL Model</span>
+            <Camera className="w-3.5 h-3.5" />
+            <span>Photo Health Check</span>
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('audio')}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'audio' ? 'bg-white text-cyan-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            onClick={() => setActiveTab('voice')}
+            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+              activeTab === 'voice'
+                ? 'bg-white text-teal-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Mic className="w-3.5 h-3.5" />
-            <span>Audio Cough &amp; Breath DL</span>
+            <span>Voice &amp; Breathing Check</span>
           </button>
         </div>
       </div>
 
-      {/* SUB-MODULE 1: VISION DEEP LEARNING */}
-      {activeTab === 'vision' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
-          {/* Left: Image Canvas & Case Selector */}
-          <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-            
-            <div className="flex items-center justify-between">
+      {/* Serene Welcome & Reassurance Strip */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-12 items-stretch">
+          <div className="md:col-span-4 relative min-h-[160px] bg-gradient-to-br from-teal-50 to-emerald-50">
+            <img
+              src={photoVoiceImg}
+              alt="Calm sunlit home wellness sanctuary with morning chamomile flowers"
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div className="md:col-span-8 p-5 sm:p-6 flex flex-col justify-center space-y-2">
+            <p className="text-xs font-semibold text-teal-700">
+              Calm Guided Self-Check
+            </p>
+            <blockquote className="text-base sm:text-lg font-bold text-slate-900 leading-snug text-balance">
+              &ldquo;Peace of mind begins with clear, gentle answers—never complicated words.&rdquo;
+            </blockquote>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Upload your own photo, record how your voice or breathing sounds, or browse our easy visual and audio guides below. Always consult a healthcare professional for urgent concerns.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* TAB 1: PHOTO HEALTH CHECK */}
+      {activeTab === 'photo' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left: Upload / Visual Selection */}
+          <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-bold text-slate-900">
-                  Convolutional Pathology Scanner
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Select a clinical test specimen or upload custom dermatological photo.
+                <h2 className="text-base font-bold text-slate-900">
+                  Check a Photo or Browse Guided Examples
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Upload a skin spot, medicine label, meal, or lab report—or pick a guide below.
                 </p>
               </div>
 
-              {/* Upload trigger */}
-              <label className="px-3 py-1.5 rounded-xl bg-cyan-50 hover:bg-cyan-100 text-cyan-800 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 border border-cyan-200">
+              <label className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs whitespace-nowrap shrink-0 self-start sm:self-auto">
                 <Upload className="w-3.5 h-3.5" />
-                <span>Upload Image</span>
-                <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                <span>Upload Your Photo</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
               </label>
             </div>
 
-            {/* Presets Row */}
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleSelectPresetVision('skin_rash')}
-                className={`p-2.5 rounded-xl border text-xs font-semibold text-left transition-all cursor-pointer ${
-                  selectedVisionKey === 'skin_rash' && !customImageUri
-                    ? 'border-cyan-500 bg-cyan-50/70 text-cyan-900 ring-1 ring-cyan-500/30'
-                    : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <span className="block font-bold">Skin Rash / Eczema</span>
-                <span className="text-[10px] text-slate-400">Dermatology Case #1</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectPresetVision('xray_normal')}
-                className={`p-2.5 rounded-xl border text-xs font-semibold text-left transition-all cursor-pointer ${
-                  selectedVisionKey === 'xray_normal' && !customImageUri
-                    ? 'border-cyan-500 bg-cyan-50/70 text-cyan-900 ring-1 ring-cyan-500/30'
-                    : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <span className="block font-bold">Chest Radiograph</span>
-                <span className="text-[10px] text-slate-400">X-Ray Thoracic View</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectPresetVision('mole_benign')}
-                className={`p-2.5 rounded-xl border text-xs font-semibold text-left transition-all cursor-pointer ${
-                  selectedVisionKey === 'mole_benign' && !customImageUri
-                    ? 'border-cyan-500 bg-cyan-50/70 text-cyan-900 ring-1 ring-cyan-500/30'
-                    : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <span className="block font-bold">Melanocytic Nevus</span>
-                <span className="text-[10px] text-slate-400">Dermatoscopy Specimen</span>
-              </button>
+            {/* Optional Note for Custom Upload */}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={photoQuestion}
+                onChange={(e) => setPhotoQuestion(e.target.value)}
+                placeholder="Optional note: e.g. Itchy patch on my forearm since yesterday..."
+                className="flex-1 px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+              />
+              {customPhotoBase64 && (
+                <button
+                  type="button"
+                  disabled={isAnalyzingPhoto}
+                  onClick={() =>
+                    analyzeUploadedPhoto(customPhotoBase64, customPhotoMime, photoQuestion)
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
+                >
+                  {isAnalyzingPhoto ? 'Checking...' : 'Re-check Photo'}
+                </button>
+              )}
             </div>
 
-            {/* Visual Viewport with Artificial Intelligence Heatmap Overlay */}
-            <div className="relative w-full h-80 bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center shadow-inner">
-              
-              {customImageUri ? (
-                <img src={customImageUri} alt="Uploaded Specimen" className="w-full h-full object-contain" />
-              ) : selectedVisionKey === 'xray_normal' ? (
-                /* Simulated Chest X-Ray */
-                <div className="w-full h-full bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center relative">
-                  <div className="w-48 h-64 border-2 border-slate-600 rounded-3xl opacity-40 flex items-center justify-center">
-                    <span className="text-slate-500 text-xs font-mono">Thorax Bilateral</span>
-                  </div>
-                </div>
-              ) : selectedVisionKey === 'skin_rash' ? (
-                /* Simulated Skin Rash */
-                <div className="w-full h-full bg-[#e8beac] flex items-center justify-center relative overflow-hidden">
-                  <div className="w-36 h-36 rounded-full bg-rose-500/40 blur-xl absolute" />
-                  <div className="w-24 h-24 rounded-full bg-red-600/30 blur-md absolute" />
-                </div>
+            {/* Visual Display Frame */}
+            <div className="w-full h-72 rounded-2xl border border-slate-200/80 bg-slate-50 overflow-hidden flex items-center justify-center relative">
+              {customPhotoUrl ? (
+                <>
+                  <img
+                    src={customPhotoUrl}
+                    alt="Uploaded health photo preview"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-contain bg-slate-900/5"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSelectPhotoExample(selectedExampleId)}
+                    className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white text-slate-700 text-xs font-bold shadow-sm border border-slate-200 cursor-pointer flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Clear Photo</span>
+                  </button>
+                </>
               ) : (
-                /* Simulated Nevus Mole */
-                <div className="w-full h-full bg-[#f3d0be] flex items-center justify-center relative">
-                  <div className="w-16 h-16 rounded-full bg-[#4a2e2b] shadow-inner" />
+                <div className="p-6 text-center max-w-md space-y-3">
+                  <div className="w-16 h-16 rounded-2xl bg-teal-100/80 text-teal-700 flex items-center justify-center mx-auto">
+                    <Sparkles className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-teal-700 block">
+                      Guided Visual Reference · {activePhotoExample.categoryLabel}
+                    </span>
+                    <h3 className="text-base font-bold text-slate-900 mt-1">
+                      {activePhotoExample.title}
+                    </h3>
+                    <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                      {activePhotoExample.summary}
+                    </p>
+                  </div>
                 </div>
               )}
 
-              {/* Class Activation Heatmap Overlay */}
-              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                <div className="w-44 h-44 rounded-3xl border-2 border-cyan-400/80 shadow-[0_0_25px_rgba(6,182,212,0.4)] flex flex-col justify-between p-2 animate-pulse">
-                  <div className="flex justify-between items-center text-[10px] font-mono text-cyan-300 bg-slate-950/70 px-1.5 py-0.5 rounded">
-                    <span>CNN ROI #1</span>
-                    <span>Confidence: 94%</span>
-                  </div>
-                  <div className="text-center text-[9px] font-mono text-cyan-300 bg-slate-950/70 py-0.5 rounded">
-                    DenseNet-121 Layer Conv5_3
-                  </div>
+              {isAnalyzingPhoto && (
+                <div className="absolute inset-0 bg-white/85 backdrop-blur-xs flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="w-6 h-6 text-teal-600 animate-spin" />
+                  <span className="text-xs font-bold text-slate-800">
+                    Reviewing your photo gently...
+                  </span>
                 </div>
+              )}
+            </div>
+
+            {/* Guided Example Switcher */}
+            <div>
+              <p className="text-xs font-semibold text-slate-500 mb-2">
+                Or explore everyday photo guides:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {PHOTO_EXAMPLES.map((ex) => {
+                  const active = !customPhotoUrl && selectedExampleId === ex.id;
+                  return (
+                    <button
+                      key={ex.id}
+                      type="button"
+                      onClick={() => handleSelectPhotoExample(ex.id)}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        active
+                          ? 'border-teal-500 bg-teal-50/70 text-teal-900'
+                          : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span className="block text-xs font-bold">{ex.title}</span>
+                      <span className="block text-[11px] text-slate-500 mt-0.5">
+                        {ex.subtitle}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-
-              {/* Scan Line Animation */}
-              {isScanningVision && (
-                <div className="absolute top-0 bottom-0 left-0 right-0 bg-gradient-to-b from-transparent via-cyan-500/25 to-transparent animate-scan" />
-              )}
             </div>
-
-            <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-              <span className="flex items-center gap-1.5">
-                <Scan className="w-3.5 h-3.5 text-cyan-600" />
-                <span>Feature Extractor: <strong>Multi-Scale Vision Transformer</strong></span>
-              </span>
-              <span>Inference Time: <strong>42 ms</strong></span>
-            </div>
-
           </div>
 
-          {/* Right: Vision Diagnostic Findings */}
-          <div className="lg:col-span-5">
-            {visionResult && (
-              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4 animate-fadeIn">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">
-                      {visionResult.category} Classification
-                    </span>
-                    <h4 className="text-lg font-black text-slate-900 mt-0.5">
-                      {visionResult.condition}
-                    </h4>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-black text-cyan-600">{visionResult.confidence}%</span>
-                    <span className="text-[10px] block font-semibold text-slate-400">Match Confidence</span>
-                  </div>
+          {/* Right: Clear Plain-English Guidance */}
+          <div className="lg:col-span-5 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+            {photoError && (
+              <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{photoError}</span>
+              </div>
+            )}
+
+            {customPhotoUrl ? (
+              <div className="space-y-3">
+                <div className="border-b border-slate-100 pb-3">
+                  <span className="text-xs font-semibold text-teal-700">
+                    Your Photo Feedback
+                  </span>
+                  <h3 className="text-lg font-black text-slate-900 mt-0.5">
+                    Personal Photo Guidance
+                  </h3>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-500">Clinical Tier:</span>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
-                    {visionResult.severity}
+                {isAnalyzingPhoto ? (
+                  <div className="space-y-2.5 py-4">
+                    <div className="h-4 bg-slate-100 rounded w-3/4 animate-pulse" />
+                    <div className="h-3 bg-slate-100 rounded w-full animate-pulse" />
+                    <div className="h-3 bg-slate-100 rounded w-5/6 animate-pulse" />
+                    <div className="h-3 bg-slate-100 rounded w-2/3 animate-pulse" />
+                  </div>
+                ) : photoAiReply ? (
+                  <div className="text-xs sm:text-sm text-slate-700 leading-relaxed">
+                    <FormattedChatMessage content={photoAiReply} isUser={false} />
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    Tap &ldquo;Re-check Photo&rdquo; anytime if you add a note above.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="border-b border-slate-100 pb-3">
+                  <span className="text-xs font-semibold text-teal-700">
+                    {activePhotoExample.categoryLabel} · {activePhotoExample.comfortLevel}
                   </span>
+                  <h3 className="text-lg font-black text-slate-900 mt-1">
+                    {activePhotoExample.title}
+                  </h3>
                 </div>
 
                 <div>
-                  <span className="text-xs font-bold text-slate-800 block mb-2">Morphological Key Findings:</span>
-                  <ul className="space-y-1.5">
-                    {visionResult.findings.map((f, i) => (
+                  <h4 className="text-xs font-bold text-slate-800 mb-2">
+                    What to Gently Notice
+                  </h4>
+                  <ul className="space-y-2">
+                    {activePhotoExample.whatToNotice.map((item, i) => (
                       <li key={i} className="text-xs text-slate-600 flex items-start gap-2">
                         <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0 mt-0.5" />
-                        <span>{f}</span>
+                        <span>{item}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
 
-                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                  <span className="text-xs font-bold text-slate-800 block mb-1">Recommended Action:</span>
-                  <p className="text-xs text-slate-600 leading-relaxed">{visionResult.recommendation}</p>
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                  <h4 className="text-xs font-bold text-slate-800">Simple Comfort &amp; Care Steps</h4>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {activePhotoExample.nextSteps}
+                  </p>
                 </div>
               </div>
             )}
           </div>
-
         </div>
       )}
 
-      {/* SUB-MODULE 2: AUDIO RESPIRATORY DEEP LEARNING */}
-      {activeTab === 'audio' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
-          <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                Acoustic Pulmonary Spectrography Model
-              </h3>
-              <p className="text-xs text-slate-500">
-                Spectrogram deep learning analyzing cough frequency envelopes, wheezing, and alveolar sounds.
-              </p>
+      {/* TAB 2: VOICE & BREATHING CHECK */}
+      {activeTab === 'voice' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left: Live Recorder + Sound Guides */}
+          <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Record Your Voice or Breathing
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Speak naturally about how you feel, or record a 5–10 second breath or cough clip.
+                </p>
+              </div>
+
+              <label className="px-3.5 py-2 rounded-xl border border-slate-200 hover:border-teal-400 bg-slate-50 hover:bg-teal-50 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 self-start sm:self-auto">
+                <FileAudio className="w-3.5 h-3.5 text-teal-600" />
+                <span>Upload Audio Clip</span>
+                <input
+                  type="file"
+                  accept="audio/*"
+                  onChange={handleAudioFileUpload}
+                  className="hidden"
+                />
+              </label>
             </div>
 
-            {/* Audio Presets */}
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleSelectAudioSample('wheezing')}
-                className={`p-3 rounded-xl border text-xs font-semibold text-left transition-all cursor-pointer ${
-                  selectedAudioKey === 'wheezing'
-                    ? 'border-cyan-500 bg-cyan-50/70 text-cyan-900 ring-1 ring-cyan-500/30'
-                    : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold">Wheezing Pattern</span>
-                  <Volume2 className="w-3.5 h-3.5 text-cyan-600" />
-                </div>
-                <span className="text-[10px] text-slate-400">Asthma / Reactive Airway</span>
-              </button>
+            {/* Optional Note */}
+            <input
+              type="text"
+              value={voiceQuestion}
+              onChange={(e) => setVoiceQuestion(e.target.value)}
+              placeholder="Optional note: e.g. Cough started 3 days ago, mostly at night..."
+              className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+            />
 
-              <button
-                type="button"
-                onClick={() => handleSelectAudioSample('bronchitic_cough')}
-                className={`p-3 rounded-xl border text-xs font-semibold text-left transition-all cursor-pointer ${
-                  selectedAudioKey === 'bronchitic_cough'
-                    ? 'border-cyan-500 bg-cyan-50/70 text-cyan-900 ring-1 ring-cyan-500/30'
-                    : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold">Bronchitic Cough</span>
-                  <Volume2 className="w-3.5 h-3.5 text-cyan-600" />
-                </div>
-                <span className="text-[10px] text-slate-400">Deep Productive Paroxysm</span>
-              </button>
+            {/* Recorder Box */}
+            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {!isRecording ? (
+                    <button
+                      type="button"
+                      onClick={startVoiceRecording}
+                      disabled={isAnalyzingAudio}
+                      className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50 whitespace-nowrap shrink-0"
+                    >
+                      <Mic className="w-4 h-4" />
+                      <span>Start Recording</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={stopVoiceRecording}
+                      className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
+                    >
+                      <Square className="w-3.5 h-3.5 fill-white" />
+                      <span>Stop &amp; Check ({recordingSec}s)</span>
+                    </button>
+                  )}
 
-              <button
-                type="button"
-                onClick={() => handleSelectAudioSample('normal_breath')}
-                className={`p-3 rounded-xl border text-xs font-semibold text-left transition-all cursor-pointer ${
-                  selectedAudioKey === 'normal_breath'
-                    ? 'border-cyan-500 bg-cyan-50/70 text-cyan-900 ring-1 ring-cyan-500/30'
-                    : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold">Normal Vesicular</span>
-                  <Volume2 className="w-3.5 h-3.5 text-cyan-600" />
+                  {recordedAudioUrl && !isRecording && (
+                    <button
+                      type="button"
+                      onClick={resetCustomAudio}
+                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 text-xs font-semibold cursor-pointer flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Reset</span>
+                    </button>
+                  )}
                 </div>
-                <span className="text-[10px] text-slate-400">Clear Alveolar Airflow</span>
-              </button>
+
+                {isAnalyzingAudio && (
+                  <span className="text-xs font-semibold text-teal-700 flex items-center gap-1.5">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Listening and preparing guidance...</span>
+                  </span>
+                )}
+              </div>
+
+              {recordedAudioUrl && (
+                <div className="pt-2 border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <audio controls src={recordedAudioUrl} className="w-full sm:max-w-xs h-9" />
+                  {recordedAudioBase64 && !isAnalyzingAudio && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        analyzeRecordedAudio(
+                          recordedAudioBase64,
+                          recordedAudioMime,
+                          voiceQuestion
+                        )
+                      }
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      Re-check Recording
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Spectrogram & Waveform Visualizer */}
-            <div className="bg-slate-950 rounded-2xl p-6 border border-slate-800 text-white space-y-4">
+            {/* Educational Sound Guides */}
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-cyan-300">Live Acoustic Spectrogram (0 - 4 kHz)</span>
+                <p className="text-xs font-semibold text-slate-600">
+                  Or listen to calming breathing &amp; cough sound guides:
+                </p>
                 <button
                   type="button"
-                  onClick={() => playSyntheticAudioSample(selectedAudioKey)}
-                  className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-xs font-bold text-white transition-colors cursor-pointer flex items-center gap-1.5"
+                  onClick={() => playExampleSound(selectedSoundId)}
+                  className="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold cursor-pointer flex items-center gap-1.5"
                 >
-                  <Play className="w-3 h-3 fill-white" />
-                  <span>{isPlayingAudio ? 'Playing Sample...' : 'Replay Audio'}</span>
+                  <Play className="w-3 h-3 fill-teal-700" />
+                  <span>{isPlayingExample ? 'Playing Sound...' : 'Play Selected Sound'}</span>
                 </button>
               </div>
 
-              {/* Dynamic Spectrogram Bars */}
-              <div className="h-32 w-full flex items-end justify-between gap-1 px-2 pt-4 bg-slate-900/60 rounded-xl border border-slate-800">
-                {Array.from({ length: 32 }).map((_, i) => {
-                  const isHighPeak = (selectedAudioKey === 'wheezing' && i > 18 && i < 26) ||
-                                     (selectedAudioKey === 'bronchitic_cough' && i < 12);
-                  const barHeight = isPlayingAudio 
-                    ? Math.floor(Math.random() * (isHighPeak ? 85 : 40)) + 15
-                    : isHighPeak ? 65 : 25;
-
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {SOUND_EXAMPLES.map((snd) => {
+                  const active = !recordedAudioUrl && selectedSoundId === snd.id;
                   return (
-                    <div
-                      key={i}
-                      style={{ height: `${barHeight}%` }}
-                      className={`flex-1 rounded-t-sm transition-all duration-150 ${
-                        isHighPeak
-                          ? 'bg-gradient-to-t from-cyan-600 to-rose-400'
-                          : 'bg-cyan-700/60'
+                    <button
+                      key={snd.id}
+                      type="button"
+                      onClick={() => {
+                        resetCustomAudio();
+                        setSelectedSoundId(snd.id);
+                        playExampleSound(snd.id);
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        active
+                          ? 'border-teal-500 bg-teal-50/70 text-teal-900'
+                          : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100'
                       }`}
-                    />
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-xs font-bold">{snd.title}</span>
+                        <Volume2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      </div>
+                      <span className="block text-[11px] text-slate-500">{snd.subtitle}</span>
+                    </button>
                   );
                 })}
               </div>
-
-              <div className="flex items-center justify-between text-[11px] text-slate-400">
-                <span>Sampling Rate: 44.1 kHz, 16-bit PCM</span>
-                <span>Algorithm: Mel-Frequency Cepstral Coefficients (MFCC)</span>
-              </div>
             </div>
-
           </div>
 
-          <div className="lg:col-span-5">
-            {audioResult && (
-              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4 animate-fadeIn">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Acoustic Analysis</span>
-                    <h4 className="text-lg font-black text-slate-900">{audioResult.classification}</h4>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-black text-cyan-600">{audioResult.confidence}%</span>
-                    <span className="text-[10px] block font-semibold text-slate-400">Accuracy</span>
-                  </div>
+          {/* Right: Voice / Breathing Guidance */}
+          <div className="lg:col-span-5 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+            {audioError && (
+              <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{audioError}</span>
+              </div>
+            )}
+
+            {recordedAudioUrl ? (
+              <div className="space-y-3">
+                <div className="border-b border-slate-100 pb-3">
+                  <span className="text-xs font-semibold text-teal-700">
+                    Your Voice &amp; Breathing Feedback
+                  </span>
+                  <h3 className="text-lg font-black text-slate-900 mt-0.5">
+                    Personal Audio Guidance
+                  </h3>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                  <span className="text-slate-500">Breathing Signature:</span>
-                  <span className="font-bold text-slate-800 ml-1.5">{audioResult.breathingPattern}</span>
+                {isAnalyzingAudio ? (
+                  <div className="space-y-2.5 py-4">
+                    <div className="h-4 bg-slate-100 rounded w-3/4 animate-pulse" />
+                    <div className="h-3 bg-slate-100 rounded w-full animate-pulse" />
+                    <div className="h-3 bg-slate-100 rounded w-5/6 animate-pulse" />
+                  </div>
+                ) : audioAiReply ? (
+                  <div className="text-xs sm:text-sm text-slate-700 leading-relaxed">
+                    <FormattedChatMessage content={audioAiReply} isUser={false} />
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    Record or upload an audio clip to receive gentle guidance.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="border-b border-slate-100 pb-3">
+                  <span className="text-xs font-semibold text-teal-700">
+                    Sound Guide · {activeSoundExample.patternLabel}
+                  </span>
+                  <h3 className="text-lg font-black text-slate-900 mt-1">
+                    {activeSoundExample.title}
+                  </h3>
+                  <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                    {activeSoundExample.summary}
+                  </p>
                 </div>
 
                 <div>
-                  <span className="text-xs font-bold text-slate-800 block mb-2">Acoustic Observations:</span>
-                  <ul className="space-y-1.5">
-                    {audioResult.clinicalObservations.map((obs, i) => (
+                  <h4 className="text-xs font-bold text-slate-800 mb-2">
+                    What to Listen For
+                  </h4>
+                  <ul className="space-y-2">
+                    {activeSoundExample.observations.map((obs, i) => (
                       <li key={i} className="text-xs text-slate-600 flex items-start gap-2">
                         <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0 mt-0.5" />
                         <span>{obs}</span>
@@ -506,17 +1025,17 @@ export const VisionAudioModels: React.FC<VisionAudioModelsProps> = ({
                   </ul>
                 </div>
 
-                <div className="bg-cyan-50 p-3.5 rounded-xl border border-cyan-100 text-xs">
-                  <span className="font-bold text-cyan-900 block mb-1">Pulmonary Suggestion:</span>
-                  <p className="text-cyan-800 leading-relaxed">{audioResult.suggestedAction}</p>
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                  <h4 className="text-xs font-bold text-slate-800">Gentle Care Tips</h4>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {activeSoundExample.careTips}
+                  </p>
                 </div>
               </div>
             )}
           </div>
-
         </div>
       )}
-
     </div>
   );
 };

@@ -26,9 +26,7 @@ import { HealthChatbot } from './components/features/HealthChatbot';
 import { HospitalFinder } from './components/features/HospitalFinder';
 import { DietPlanner } from './components/features/DietPlanner';
 import { HealthRecords } from './components/features/HealthRecords';
-import { WearablesIoT } from './components/features/WearablesIoT';
 import { VisionAudioModels } from './components/features/VisionAudioModels';
-import { EmotionSentimentCenter } from './components/features/EmotionSentimentCenter';
 import { UserProfileView } from './components/features/UserProfileView';
 
 export default function App() {
@@ -53,6 +51,15 @@ export default function App() {
   // Navigation State
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Google Maps Platform Quota Banner State
+  const [gmpQuotaExceeded, setGmpQuotaExceeded] = useState(false);
+
+  useEffect(() => {
+    const handleGmpQuota = () => setGmpQuotaExceeded(true);
+    window.addEventListener('gmp-quota-exceeded', handleGmpQuota);
+    return () => window.removeEventListener('gmp-quota-exceeded', handleGmpQuota);
+  }, []);
 
   // Theme Change Handler
   const handleToggleTheme = (newTheme: ThemeMode) => {
@@ -126,6 +133,24 @@ export default function App() {
         onClose={() => setIsAuthModalOpen(false)}
         onLoginSuccess={handleLoginSuccess}
       />
+
+      {/* Google Maps Platform Quota Notice */}
+      {gmpQuotaExceeded && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
+          <span>
+            Google Maps Platform quota reached. If you are the app owner, visit{' '}
+            <a
+              href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-semibold text-amber-950 hover:text-amber-800"
+            >
+              maps developer site
+            </a>{' '}
+            for instructions to update your account.
+          </span>
+        </div>
+      )}
 
       {/* 3. Top Navigation Bar */}
       <Navbar
@@ -214,24 +239,8 @@ export default function App() {
               />
             )}
 
-            {activeView === 'wearables-iot' && (
-              <WearablesIoT
-                currentUser={currentUser}
-                language={language}
-                onBack={handleBackToDashboard}
-              />
-            )}
-
             {activeView === 'vision-audio' && (
               <VisionAudioModels
-                currentUser={currentUser}
-                language={language}
-                onBack={handleBackToDashboard}
-              />
-            )}
-
-            {activeView === 'emotion-sentiment' && (
-              <EmotionSentimentCenter
                 currentUser={currentUser}
                 language={language}
                 onBack={handleBackToDashboard}

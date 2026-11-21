@@ -6,17 +6,17 @@ import {
   Building2, 
   UtensilsCrossed, 
   FileText, 
-  Watch, 
-  Eye, 
-  Smile, 
+  Camera,
   UserCheck, 
   ChevronRight, 
   X, 
-  Heart
+  Heart,
+  Sun,
+  Moon,
+  Sparkles
 } from 'lucide-react';
 import { ActiveView, SupportedLanguage, UserProfile, ThemeMode } from '../types';
 import { TRANSLATIONS } from '../translations';
-import { Sun, Moon, Sparkles } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -42,7 +42,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const t = TRANSLATIONS[language];
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
 
-  // All features with NO accuracy mentions
   const menuItems = [
     {
       id: 'dashboard' as ActiveView,
@@ -81,22 +80,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       color: 'text-indigo-600 bg-indigo-50',
     },
     {
-      id: 'wearables-iot' as ActiveView,
-      label: t.wearablesIoT,
-      icon: Watch,
-      color: 'text-purple-600 bg-purple-50',
-    },
-    {
       id: 'vision-audio' as ActiveView,
       label: t.visionAudioModels,
-      icon: Eye,
+      icon: Camera,
       color: 'text-cyan-600 bg-cyan-50',
-    },
-    {
-      id: 'emotion-sentiment' as ActiveView,
-      label: t.emotionSentiment,
-      icon: Smile,
-      color: 'text-pink-600 bg-pink-50',
     },
     {
       id: 'profile' as ActiveView,

@@ -150,11 +150,20 @@ export interface ModelPredictionResult {
   testedDate: string;
 }
 
+export interface ChatAttachment {
+  type: 'image' | 'audio';
+  mimeType: string;
+  dataUrl: string;
+  name?: string;
+  durationSec?: number;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'bot';
   text: string;
   timestamp: string;
+  attachment?: ChatAttachment;
   detectedEmotion?: {
     emotion: string;
     sentiment: 'Positive' | 'Neutral' | 'Anxious' | 'Distressed';
@@ -162,18 +171,35 @@ export interface ChatMessage {
   };
 }
 
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+  messages: ChatMessage[];
+}
+
 export interface HospitalFacility {
   id: string;
+  placeId?: string;
   name: string;
   type: 'Hospital' | 'Clinic' | 'Pharmacy' | 'Trauma Center';
+  primaryTypeDisplay?: string;
   distanceKm: number;
   address: string;
   phone: string;
   rating: number;
+  userRatingCount?: number;
   open24x7: boolean;
+  openNow?: boolean;
+  openingHoursText?: string[];
   icuAvailable: boolean;
   emergencyBeds: number;
   specialties: string[];
+  businessStatus?: string;
+  websiteUri?: string;
+  googleMapsUri?: string;
+  directionsUri?: string;
   coordinates: {
     lat: number;
     lng: number;
@@ -191,15 +217,27 @@ export interface MealDetail {
   instructions: string;
 }
 
+export interface CustomDietPreferences {
+  goal: string;
+  dietType: string;
+  cuisine: string;
+  targetCalories: number;
+  allergiesOrAvoid: string;
+  favoriteFoods: string;
+  notes: string;
+}
+
 export interface DailyDietPlan {
   id: string;
   title: string;
-  goal: 'Weight Loss' | 'Balanced Maintenance' | 'Muscle Gain' | 'Diabetic Friendly' | 'Heart Healthy' | 'Keto/Low Carb';
-  dietType: 'Standard' | 'Vegetarian' | 'Vegan' | 'Low Sodium';
+  goal: string;
+  dietType: string;
   targetCalories: number;
   targetWaterLiters: number;
   meals: MealDetail[];
   tips: string[];
+  isCustom?: boolean;
+  customization?: CustomDietPreferences;
   userRating?: number; // 1-5 feedback
   userNotes?: string;
 }
@@ -207,7 +245,7 @@ export interface DailyDietPlan {
 export interface HealthRecordEntry {
   id: string;
   date: string;
-  category: 'Symptom Check' | 'Specialized ML' | 'Vitals Log' | 'Diet Goal';
+  category: 'Symptom Check' | 'Health Screening' | 'Specialized ML' | 'Daily Check-In' | 'Vitals Log' | 'Diet Goal';
   title: string;
   summary: string;
   metrics?: {
@@ -272,7 +310,5 @@ export type ActiveView =
   | 'hospital-finder'
   | 'diet-planner'
   | 'health-records'
-  | 'wearables-iot'
   | 'vision-audio'
-  | 'emotion-sentiment'
   | 'profile';
